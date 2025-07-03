@@ -21,7 +21,7 @@ from ..utils.performance_monitor import PerformanceMonitor
 logger = get_logger()
 
 
-def handle_interactive_input(ch, method, properties, body, tcp_settings: Dict[str, Any], input_queue: Queue) -> None:
+def handle_interactive_input(ch, method, properties, body, input_queue: Queue) -> None:
     """Handle incoming interactive input messages and put them in the queue"""
     try:
         msg = yaml.safe_load(body)
@@ -81,7 +81,7 @@ def handle_interactive_simulation(
             agent_id = agent_id
         )
         controller.start(performance_monitor)
-        controller.run(data.get('inputs', {}), performance_monitor, msg_dict, tcp_settings, request_id)
+        controller.run(data.get('inputs', {}), performance_monitor, msg_dict, request_id)
         performance_monitor.record_matlab_stop()
 
         success_response = create_response(
@@ -197,7 +197,10 @@ class MatlabInteractiveController:
         self.response_templates: Dict = response_templates
         host = tcp_settings.get('host', 'localhost')
         port = tcp_settings.get('port', 5678)
+        in_host = tcp_settings.get('input_host', host)
+        in_port = tcp_settings.get('input_port', 5679)
         self.connection = InteractiveConnection(host, port)
+        self.input_connection = InteractiveConnection(in_host, in_port)
         self.rabbitmq_manager = message_broker
         if not self.sim_path.exists() or not (self.sim_path / self.sim_file).exists():
             raise FileNotFoundError(f"Simulation file '{self.sim_file}' not found in '{self.sim_path}'")
@@ -229,8 +232,8 @@ class MatlabInteractiveController:
     def start(self, performance_monitor: PerformanceMonitor) -> None:
         try:
             self.start_time = time.time()
-            ## here you want to start the TCP server and MATLAB process
-            # self.connection.start_server()
+            self.connection.start_server()
+            self.input_connection.start_server()
             self._start_matlab()
             performance_monitor.record_matlab_startup_complete()
             logger.debug("MATLAB startup duration: %.2fs", time.time() - self.start_time)
@@ -268,11 +271,8 @@ class MatlabInteractiveController:
             time.sleep(delay)
 
 
-    def run(self, inputs: Dict[str, Any], performance_monitor,  msg_dict, tcp_settings, request_id) -> None:
+    def run(self, inputs: Dict[str, Any], performance_monitor, msg_dict, request_id) -> None:
         """Run the interactive simulation with proper Queue handling"""
-        tcp = TCPClient()
-        tcp.connect()
-
         input_queue = Queue()
         simulation_data = msg_dict.get('simulation', {})        
         stream_key = simulation_data.get("inputs", {}).get("stream_source", "").replace("rabbitmq://", "")
@@ -297,7 +297,7 @@ class MatlabInteractiveController:
         from functools import partial
 
         # Pass the actual Queue object, not the string
-        callback_with_tcp = partial(handle_interactive_input, tcp_settings=tcp_settings, input_queue=input_queue)
+        callback_with_tcp = partial(handle_interactive_input, input_queue=input_queue)
 
         self.rabbitmq_manager.channel.basic_consume(
             queue=queue_name,
@@ -311,12 +311,14 @@ class MatlabInteractiveController:
         try:
             logger.debug("Waiting for MATLAB connection...")
             self.connection.accept_connection()
+            self.input_connection.accept_connection()
             self.connection.send(inputs)
+            sequence = 0
 
             while True:
                 try:
                     command = input_queue.get(timeout=100)
-                    self.connection.send(command)
+                    self.input_connection.send(command)
                     responses = self.connection.receive()
                     for response in responses:
                         self._process_output(response, sequence)

@@ -184,6 +184,8 @@ logging:
 tcp:
   host: localhost # The hostname or IP address for TCP communication.
   port: 5678 # The port number for TCP communication.
+  input_host: localhost # Hostname for the input TCP channel.
+  input_port: 5679 # Port for the input TCP channel.
 
 response_templates:
   success:

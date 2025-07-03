@@ -36,7 +36,9 @@ def mock_config_data():
         },
         "tcp": {
             "host": "localhost",
-            "port": 5678
+            "port": 5678,
+            "input_host": "localhost",
+            "input_port": 5679
         },
         "response_templates": {
             "success": {
@@ -139,7 +141,9 @@ def test_config_manager_initialization():
         },
         "tcp": {
             "host": "localhost",
-            "port": 5678
+            "port": 5678,
+            "input_host": "localhost",
+            "input_port": 5679
         },
         "response_templates": {
             "success": {

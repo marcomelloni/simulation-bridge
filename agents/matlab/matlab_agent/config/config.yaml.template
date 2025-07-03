@@ -33,6 +33,8 @@ performance:
 tcp:
   host: localhost
   port: 5678
+  input_host: localhost
+  input_port: 5679
 
 response_templates:
   success:

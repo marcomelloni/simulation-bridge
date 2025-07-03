@@ -4,7 +4,7 @@ function InteractiveSimulation()
     disp("🟢 Starting communication loop...");
     while true
         % Receive data from Python (blocking at start, then streaming)
-        data_in = wrapper.get_inputs();
+        data_in = wrapper.get_input();
 
         if ~isempty(data_in)
             disp("📥 Input received:");

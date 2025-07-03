@@ -282,7 +282,7 @@ class MessageHandler(IRabbitMQMessageHandler):
         from functools import partial
 
         # Pass the actual Queue object, not the string
-        callback_with_tcp = partial(handle_interactive_input, tcp_settings=tcp_settings, input_queue=input_queue)
+        callback_with_tcp = partial(handle_interactive_input, input_queue=input_queue)
 
         self.rabbitmq_manager.channel.basic_consume(
             queue=queue_name,
