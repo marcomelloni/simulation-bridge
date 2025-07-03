@@ -63,6 +63,7 @@ In the directory
 you will find several folders containing practical examples. Each example folder includes a `README.md` with detailed instructions:
 
 - [Streaming Simulation](../docs/examples/streaming-simulation/README.md)
+- [Interactive Simulation](../docs/examples/interactive-simulation/InteractiveSimulation.m)
 - [Batch Simulation](../docs/examples/batch-simulation/README.md)
 - [Industrial Cooling Fan Anomaly Detection](../docs/examples/industrial-cooling-fan-anomaly-detection/README.md)
 
@@ -90,7 +91,7 @@ Each example folder contains an `api/` subfolder with example simulation payload
 - Batch Simulation:  
   `docs/examples/batch-simulation/api/simulation_batch.yaml.example`
 
-- Streaming Simulation:  
+- Streaming Simulation:
   `docs/examples/streaming-simulation/api/simulation_streaming.yaml.example`
 
 ### Example usage
