@@ -6,9 +6,7 @@ import json
 import socket
 import subprocess
 import time
-from functools import partial
 from pathlib import Path
-from queue import Queue, Empty
 from select import select
 from typing import Any, Dict, Optional
 
@@ -24,14 +22,16 @@ logger = get_logger()
 
 
 # ---------------------------------------------------------------------------
-# RabbitMQ -> Queue helper
+# RabbitMQ frame parser
 # ---------------------------------------------------------------------------
 
-def _enqueue_frame(ch, method, properties, body, q: Queue) -> None:
+def _parse_frame(body: bytes) -> Dict[str, Any]:
+    """Decode a YAML frame received from RabbitMQ."""
     try:
-        q.put(yaml.safe_load(body))
+        return yaml.safe_load(body)
     except Exception as exc:  # pragma: no cover - logging only
         logger.error("[INTERACTIVE] Bad frame: %s", exc)
+        return {}
 
 
 # ---------------------------------------------------------------------------
@@ -189,29 +189,22 @@ class MatlabInteractiveController:
     def run(self, pm: PerformanceMonitor, msg_dict: Dict[str, Any]) -> None:
         sim = msg_dict["simulation"]
         stream_key = sim["inputs"]["stream_source"].replace("rabbitmq://", "")
-        q_in: Queue = Queue()
 
         ch = self.broker.channel
         qname = f"Q.{self.agent_id}.interactive.{self.request_id}"
         ch.exchange_declare("ex.input.stream", exchange_type="topic", durable=True)
         ch.queue_declare(queue=qname, durable=True)
         ch.queue_bind(exchange="ex.input.stream", queue=qname, routing_key=stream_key)
-        ch.basic_consume(queue=qname, on_message_callback=partial(_enqueue_frame, q=q_in), auto_ack=True)
 
         try:
             while True:
-                # pump RabbitMQ
-                self.broker.connection.process_data_events(time_limit=0)
+                method, properties, body = ch.basic_get(queue=qname, auto_ack=True)
+                while method:
+                    frame = _parse_frame(body)
+                    if frame:
+                        self.in_srv.send(self._only_inputs(frame))
+                    method, properties, body = ch.basic_get(queue=qname, auto_ack=True)
 
-                # forward all pending frames to MATLAB
-                while True:
-                    try:
-                        frame = q_in.get_nowait()
-                    except Empty:
-                        break
-                    self.in_srv.send(self._only_inputs(frame))
-
-                # read all MATLAB outputs
                 for resp in self.out_srv.recv_all():
                     self._relay(resp)
 
