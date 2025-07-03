@@ -7,6 +7,7 @@ This Python module provides a simple RabbitMQ client to send simulation requests
 - [Use Matlab Agent](#use-matlab-agent)
   - [Table of Contents](#table-of-contents)
   - [Installation](#installation)
+  - [Clients](#clients)
   - [Configuration](#configuration)
   - [Usage](#usage)
   - [Example](#example)
@@ -21,6 +22,16 @@ Before using this agent, ensure the required Python packages are installed:
 ```bash
 pip install pika pyyaml
 ```
+
+## Clients
+
+Two Python scripts are provided:
+
+- **use_matlab_agent.py** – Simple client that sends a simulation request and
+  waits for results. Use this for *batch* and *streaming* simulations.
+- **use_matlab_agent_interactive.py** – Async client for *interactive*
+  simulations. It streams input frames to MATLAB and prints outputs as they
+  arrive.
 
 ## Configuration
 
@@ -50,11 +61,15 @@ Command-Line Options:
 
 If this option is omitted, the script will look for a file named `simulation.yaml` in the default location as configured in `use.yaml` (by default in the same directory or as specified in the `simulation_request` field).
 
-- **Without CLI option:**  
+- **Without CLI option:**
   The script loads the simulation payload from the default path specified in `use.yaml`. This is by default a `simulation.yaml` file located in the working directory or as configured.
 
-- **With CLI option:**  
+- **With CLI option:**
   You can override the default by specifying a custom path to the simulation payload YAML file using the `--api-payload` option.
+
+For interactive simulations, use `use_matlab_agent_interactive.py` with the same
+`--api-payload` flag. This client streams input frames based on the
+`inputs.stream_source` field and prints outputs as they arrive.
 
 ## Example
 
@@ -100,4 +115,10 @@ To run the batch simulation example, specify the full absolute path to the paylo
 
 ```bash
 python use_matlab_agent.py --api-payload "/Users/foo/simulation-bridge/agents/matlab/matlab_agent/docs/examples/batch-simulation/api/simulation_batch.yaml.example"
+```
+
+For an interactive simulation, run the asynchronous client instead:
+
+```bash
+python use_matlab_agent_interactive.py --api-payload "/path/to/simulation_interactive.yaml"
 ```
