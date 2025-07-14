@@ -154,7 +154,7 @@ class RabbitMQAdapter(ProtocolAdapter):
                 )
             elif queue_name == 'Q.bridge.result':
                 operation_id = message.get('request_id', 'unknown')
-                performance_monitor.record_core_received_result(operation_id)
+                performance_monitor.record_core_received_result(operation_id, 'rabbitmq')
                 bridge_meta = message.get('bridge_meta', {})
                 if isinstance(bridge_meta, str):
                     if bridge_meta.strip().startswith('{'):
