@@ -16,6 +16,15 @@ from ..utils.logger import get_logger
 # Configure logger
 logger = get_logger()
 
+# In-memory mode flag
+__inmemory_mode = False
+
+
+def set_inmemory_mode(enabled: bool) -> None:
+    """Enable or disable in-memory protocol configuration mode."""
+    global __inmemory_mode
+    __inmemory_mode = enabled
+
 
 def load_config(
         config_path: Optional[Union[str, Path]] = None) -> Dict[str, Any]:
@@ -92,7 +101,11 @@ def load_protocol_config() -> Dict[str, list]:
     """
     Load the protocol configuration from a JSON file.
     """
-    config_file = Path(__file__).parent.parent / \
-        "protocol_adapters/adapters_signal.json"
+    base_path = Path(__file__).parent.parent / "protocol_adapters"
+
+    if __inmemory_mode:
+        config_file = base_path / "inmemory_signal.json"
+    else:
+        config_file = base_path / "adapters_signal.json"
     with open(config_file, 'r', encoding='utf-8') as f:
         return json.load(f)["protocols"]

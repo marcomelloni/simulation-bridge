@@ -139,8 +139,8 @@ class TestEnvVarSubstitution:
 class TestLoadProtocolConfig:  # pylint: disable=too-few-public-methods
     """Test cases for load_protocol_config function."""
 
-    def test_load_protocol_config_success(self, protocol_json):
-        """Test successful loading and parsing of protocol config JSON file."""
+    def test_load_protocol_config_default(self, protocol_json):
+        """Load configuration in default (file) mode."""
         json_str = json.dumps(protocol_json)
         mock_open = mock.mock_open(read_data=json_str)
 
@@ -148,6 +148,23 @@ class TestLoadProtocolConfig:  # pylint: disable=too-few-public-methods
             "protocol_adapters/adapters_signal.json"
 
         with mock.patch("builtins.open", mock_open) as m_open:
+            config_loader.set_inmemory_mode(False)
+            protocols = config_loader.load_protocol_config()
+
+            m_open.assert_called_once_with(config_file, 'r', encoding='utf-8')
+            assert isinstance(protocols, list)
+            assert protocols == protocol_json["protocols"]
+
+    def test_load_protocol_config_inmemory(self, protocol_json):
+        """Load configuration when in-memory mode is enabled."""
+        json_str = json.dumps(protocol_json)
+        mock_open = mock.mock_open(read_data=json_str)
+
+        config_file = Path(config_loader.__file__).parent.parent / \
+            "protocol_adapters/inmemory_signal.json"
+
+        with mock.patch("builtins.open", mock_open) as m_open:
+            config_loader.set_inmemory_mode(True)
             protocols = config_loader.load_protocol_config()
 
             m_open.assert_called_once_with(config_file, 'r', encoding='utf-8')
