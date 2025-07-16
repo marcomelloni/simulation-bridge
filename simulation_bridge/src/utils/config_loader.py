@@ -21,7 +21,11 @@ __inmemory_mode = False
 
 
 def set_inmemory_mode(enabled: bool) -> None:
-    """Enable or disable in-memory protocol configuration mode."""
+    """Enable or disable loading of the in-memory protocol configuration.
+
+    The loader defaults to using the standard protocol configuration file.
+    Call this function with ``True`` only when running entirely in-memory.
+    """
     global __inmemory_mode
     __inmemory_mode = enabled
 
