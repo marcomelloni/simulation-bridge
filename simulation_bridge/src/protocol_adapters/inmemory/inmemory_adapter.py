@@ -84,41 +84,6 @@ class InMemoryAdapter(ProtocolAdapter):
         pass
 
 
-class DummyAdapter(ProtocolAdapter):
-    """Neutral adapter for MQTT and REST protocols."""
-
-    def __init__(self, config_manager: ConfigManager | None = None):
-        super().__init__(config_manager or ConfigManager(None))
-
-    def _get_config(self) -> Dict[str, Any]:
-        return {}
-
-    def start(self) -> None:
-        logger.debug("DummyAdapter started (no-op)")
-        self._running = True
-
-    def stop(self) -> None:
-        logger.debug("DummyAdapter stopped (no-op)")
-        self._running = False
-
-    def _handle_message(self, message: Dict[str, Any]) -> None:  # noqa: D401
-        # This method is intentionally empty as DummyAdapter serves as a null object
-        # to prevent errors when MQTT/REST protocols are not used but signals expect
-        # these adapters to be registered
-        pass
-
-    def publish_result_message_mqtt(self, *_, **__) -> None:
-        # This method is intentionally empty as DummyAdapter serves as a null object
-        # to prevent errors when MQTT/REST protocols are not used but signals expect
-        # these adapters to be registered
-        pass
-
-    def publish_result_message_rest(self, *_, **__) -> None:
-        # This method is intentionally empty as DummyAdapter serves as a null object
-        # to prevent errors when MQTT/REST protocols are not used but signals expect
-        # these adapters to be registered
-        pass
-
 
 class SimulationBridge:
     """Run simulations using the in-memory protocol adapter."""
@@ -139,12 +104,6 @@ class SimulationBridge:
             "inmemory", self.inmemory_adapter)
         SignalManager.register_adapter_instance(
             "rabbitmq", self.rabbitmq_adapter)
-
-        # Required to satisfy signals expecting these adapters.
-        # Acts as a "null object" to avoid errors when MQTT/REST are unused.
-        dummy = DummyAdapter()
-        SignalManager.register_adapter_instance("mqtt", dummy)
-        SignalManager.register_adapter_instance("rest", dummy)
 
         SignalManager.connect_all_signals()
 

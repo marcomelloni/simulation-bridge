@@ -41,7 +41,8 @@ class BridgeOrchestrator:
         self.adapters = {}
         self._running = False
 
-        self.protocol_config = load_protocol_config()
+        self.protocol_config = load_protocol_config(self.config_manager.config_path)
+        SignalManager.PROTOCOL_CONFIG = self.protocol_config
         self.adapter_classes = self._import_adapter_classes()
 
     def setup_interfaces(self):
