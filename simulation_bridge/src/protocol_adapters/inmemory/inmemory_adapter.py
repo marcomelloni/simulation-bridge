@@ -7,6 +7,7 @@ from ...utils.config_manager import ConfigManager
 from ...utils.logger import get_logger
 from ..base.protocol_adapter import ProtocolAdapter
 from ...utils.signal_manager import SignalManager
+from ...utils.config_loader import load_protocol_config
 from ...core.bridge_core import BridgeCore
 from ..rabbitmq.rabbitmq_adapter import RabbitMQAdapter
 
@@ -90,6 +91,8 @@ class SimulationBridge:
 
     def __init__(self, config_path: str | None = None) -> None:
         self.config_manager = ConfigManager(config_path)
+        SignalManager.PROTOCOL_CONFIG = load_protocol_config(
+            self.config_manager.config_path)
         self.inmemory_adapter = InMemoryAdapter(self.config_manager)
         self.rabbitmq_adapter = RabbitMQAdapter(self.config_manager)
 
