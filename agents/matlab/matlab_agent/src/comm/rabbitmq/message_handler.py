@@ -18,6 +18,7 @@ from ...utils.create_response import create_response
 from ...core.batch import handle_batch_simulation
 from ...core.streaming import handle_streaming_simulation
 from ...core.interactive import handle_interactive_simulation
+from ...utils.commands import CommandRegistry
 
 logger = get_logger()
 
@@ -139,6 +140,29 @@ class MessageHandler(IRabbitMQMessageHandler):
                 msg_dict = {}
                 msg_dict = yaml.safe_load(body)
                 logger.debug("Parsed message: %s", msg_dict)
+                # Handle simple command messages
+                if isinstance(msg_dict, dict) and 'command' in msg_dict:
+                    cmd = msg_dict['command'].upper()
+                    if cmd == 'STOP':
+                        CommandRegistry.stop()
+                    elif cmd == 'RUN':
+                        CommandRegistry.reset()
+                    elif cmd == 'CHECK':
+                        status = 'stopped' if CommandRegistry.should_stop() else 'running'
+                        self.rabbitmq_manager.send_result(
+                            source,
+                            create_response(
+                                'success',
+                                '',
+                                '',
+                                {},
+                                outputs={'status': status},
+                                bridge_meta='control',
+                                request_id='control'
+                            )
+                        )
+                    ch.basic_ack(delivery_tag=method.delivery_tag)
+                    return
             except yaml.YAMLError as e:
                 logger.error("YAML parsing error: %s", e)
                 error_response = create_response(

@@ -119,3 +119,19 @@ To run the batch simulation example, specify the full absolute path to the paylo
 ```bash
 python use_matlab_agent.py --api-payload "/Users/foo/simulation-bridge/agents/matlab/matlab_agent/docs/examples/batch-simulation/api/simulation_batch.yaml.example"
 ```
+
+## Control Commands
+
+During a simulation you can remotely control the MATLAB agent by sending simple
+command messages via RabbitMQ. Supported commands are:
+
+- `RUN` – clear any previous stop request and allow the simulation to run.
+- `STOP` – request the currently running simulation to terminate gracefully.
+- `CHECK` – query the agent status (returns `running` or `stopped`).
+
+To issue a command, publish a YAML message containing a `command` field to the
+agent input exchange:
+
+```yaml
+command: STOP
+```
