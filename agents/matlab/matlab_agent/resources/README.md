@@ -25,13 +25,12 @@ pip install pika pyyaml
 
 ## Clients
 
-Two Python scripts are provided:
+Three Python scripts are provided:
 
 - **use_matlab_agent.py** – Simple client that sends a simulation request and
   waits for results. Use this for _batch_ and _streaming_ simulations.
-- **use_matlab_agent_interactive.py** – Async client for _interactive_
-  simulations. It streams input frames to MATLAB and prints outputs as they
-  arrive.
+- **use_matlab_agent_interactive.py** – Async client for _interactive_ simulations. It streams input frames to MATLAB and prints outputs as they arrive.
+- **use_matlab_agent_command.py** – Send `STOP`, `RUN`, or `CHECK` commands to a running MATLAB agent.
 
 ## Configuration
 
@@ -135,3 +134,10 @@ agent input exchange:
 ```yaml
 command: STOP
 ```
+
+You can use `use_matlab_agent_command.py` to send these commands from the command line. For example:
+
+```bash
+python use_matlab_agent_command.py STOP
+```
+
