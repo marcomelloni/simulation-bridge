@@ -1,8 +1,10 @@
 import threading
 
+
 class StopRequested(Exception):
     """Raised to unwind the stack when a stop is requested."""
     pass
+
 
 class CommandRegistry:
     _stop_event = threading.Event()

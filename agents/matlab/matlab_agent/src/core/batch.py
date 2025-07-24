@@ -19,6 +19,7 @@ from .matlab_simulator import (
     MatlabSimulationError,
     MatlabSimulator,
 )
+from ..utils.commands import CommandRegistry, StopRequested
 from ..utils.performance_monitor import PerformanceMonitor
 
 # Configure logger
@@ -50,6 +51,8 @@ def handle_batch_simulation(
     try:
         # Record MATLAB start
         performance_monitor.record_matlab_start()
+        if CommandRegistry.should_stop():
+            raise StopRequested()
 
         data: Dict[str, Any] = msg_dict.get('simulation', {})
         bridge_meta = data.get('bridge_meta', 'unknown')
@@ -72,6 +75,8 @@ def handle_batch_simulation(
                        bridge_meta,
                        request_id)
         _start_matlab_with_retry(sim)
+        if CommandRegistry.should_stop():
+            raise StopRequested()
         _send_progress(rabbitmq_manager,
                        source,
                        sim_file,
@@ -79,6 +84,8 @@ def handle_batch_simulation(
                        response_templates,
                        bridge_meta,
                        request_id)
+        if CommandRegistry.should_stop():
+            raise StopRequested()
         results = sim.run(inputs, outputs)
         metadata = _get_metadata(sim) if response_templates.get(
             'success', {}).get('include_metadata', False) else None
@@ -99,6 +106,18 @@ def handle_batch_simulation(
 
         logger.info("Simulation '%s' completed successfully", sim_file)
 
+    except StopRequested:
+        logger.info("Stop requested - terminating batch simulation")
+        error_response = create_response(
+            'error',
+            sim_file or 'unknown',
+            'batch',
+            response_templates,
+            bridge_meta=bridge_meta,
+            request_id=request_id,
+            error={'message': 'Simulation stopped', 'type': 'stopped'}
+        )
+        rabbitmq_manager.send_result(source, error_response)
     except Exception as e:  # pylint: disable=broad-except
         _handle_error(
             e,
@@ -137,6 +156,8 @@ def _start_matlab_with_retry(
         max_retries: int = 3) -> None:
     """Attempt to start MATLAB engine with retries."""
     for attempt in range(1, max_retries + 1):
+        if CommandRegistry.should_stop():
+            raise StopRequested()
         try:
             sim.start()
             return

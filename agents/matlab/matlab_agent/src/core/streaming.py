@@ -21,6 +21,7 @@ from ..utils.create_response import create_response
 from ..utils.logger import get_logger
 from ..utils.performance_monitor import PerformanceMonitor
 from .matlab_simulator import MatlabSimulator
+from ..utils.commands import CommandRegistry, StopRequested
 
 # Configure logger
 logger = get_logger()
@@ -301,6 +302,8 @@ class MatlabStreamingController:
             buffer = b""
             sequence = 0
             while True:
+                if CommandRegistry.should_stop():
+                    raise StopRequested()
                 chunk = self.connection.connection.recv(4096)
                 if not chunk:
                     logger.debug("Connection closed")
@@ -323,6 +326,8 @@ class MatlabStreamingController:
         except (ConnectionError, OSError) as e:
             logger.error("Connection error: %s", str(e))
             raise MatlabStreamingError(f"Connection error: {str(e)}") from e
+        except StopRequested:
+            logger.info("Stop requested - terminating streaming simulation")
 
     def get_metadata(self) -> Dict[str, Any]:
         """Collect system resource metadata."""

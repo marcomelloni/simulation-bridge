@@ -18,6 +18,7 @@ from ..utils.create_response import create_response
 from ..utils.logger import get_logger
 from ..utils.performance_monitor import PerformanceMonitor
 from .matlab_simulator import MatlabSimulator
+from ..utils.commands import CommandRegistry, StopRequested
 from ..utils.constants import (
     ACCEPT_TIMEOUT,
     BUFFER_SIZE,
@@ -243,6 +244,8 @@ class MatlabInteractiveController:
 
         try:
             while True:
+                if CommandRegistry.should_stop():
+                    raise StopRequested()
                 if self.out_srv.matlab_proc and self.out_srv.matlab_proc.poll() is not None:
                     logger.debug(
                         "[INTERACTIVE] MATLAB process ended, stopping loop")
@@ -267,6 +270,8 @@ class MatlabInteractiveController:
                     self._relay(resp)
         except KeyboardInterrupt:  # pragma: no cover - manual interruption
             logger.info("[INTERACTIVE] Interrupted by user")
+        except StopRequested:
+            logger.info("[INTERACTIVE] Stop requested - terminating")
         finally:
             pm.record_simulation_complete()
 

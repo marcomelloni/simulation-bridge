@@ -8,6 +8,7 @@ Unit tests for MessageHandler class.
 
 import uuid
 from unittest.mock import Mock, patch
+import time
 import pytest
 import yaml
 from pika.spec import Basic, BasicProperties
@@ -172,6 +173,7 @@ class TestMessageHandler:
             self.mock_properties,
             b'test message body'
         )
+        time.sleep(0.05)
 
         # Verify
         mock_yaml_load.assert_called_once_with(b'test message body')
@@ -214,6 +216,7 @@ class TestMessageHandler:
             self.mock_properties,
             b'test message body'
         )
+        time.sleep(0.05)
 
         # Verify
         mock_yaml_load.assert_called_once_with(b'test message body')
@@ -502,6 +505,7 @@ class TestMessageHandler:
                     self.mock_properties,
                     b'test message'
                 )
+                time.sleep(0.05)
 
                 # Verify source is correctly extracted
                 mock_batch.assert_called_once()
@@ -576,6 +580,7 @@ class TestMessageHandlerIntegration:
             mock_properties,
             message_body
         )
+        time.sleep(0.05)
 
         # Verify successful processing
         mock_handle_batch.assert_called_once()
@@ -634,6 +639,7 @@ class TestMessageHandlerIntegration:
             mock_properties,
             message_body
         )
+        time.sleep(0.05)
 
         # Verify successful processing
         mock_handle_streaming.assert_called_once()

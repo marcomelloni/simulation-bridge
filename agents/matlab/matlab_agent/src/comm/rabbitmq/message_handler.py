@@ -2,6 +2,7 @@
 Message handler for processing incoming RabbitMQ messages.
 """
 import uuid
+import threading
 from typing import Any, Optional, Dict
 
 import yaml
@@ -99,6 +100,7 @@ class MessageHandler(IRabbitMQMessageHandler):
         self.response_templates = self.config.get(
             'response_templates', {})
         self.interactive_queues: Dict[str, queue.Queue] = {}
+        self._sim_thread: threading.Thread | None = None
 
     def get_agent_id(self) -> str:
         """
@@ -108,6 +110,39 @@ class MessageHandler(IRabbitMQMessageHandler):
             str: The ID of the agent
         """
         return self.agent_id
+
+    # ------------------------------------------------------------------
+    def _run_simulation(self, sim_type: str, msg_dict: Dict[str, Any],
+                        source: str) -> None:
+        """Run the requested simulation in a background thread."""
+        try:
+            if sim_type == 'batch':
+                handle_batch_simulation(
+                    msg_dict,
+                    source,
+                    self.rabbitmq_manager,
+                    self.path_simulation,
+                    self.response_templates)
+            elif sim_type == 'streaming':
+                tcp_settings = self.config.get('tcp', {})
+                handle_streaming_simulation(
+                    msg_dict,
+                    source,
+                    self.rabbitmq_manager,
+                    self.path_simulation,
+                    self.response_templates,
+                    tcp_settings)
+            elif sim_type == 'interactive':
+                tcp_settings = self.config.get('tcp', {})
+                handle_interactive_simulation(
+                    msg_dict,
+                    source,
+                    self.rabbitmq_manager,
+                    self.path_simulation,
+                    self.response_templates,
+                    tcp_settings)
+        finally:
+            self._sim_thread = None
 
     def handle_message(
         self,
@@ -145,11 +180,16 @@ class MessageHandler(IRabbitMQMessageHandler):
                     cmd = msg_dict['command'].upper()
                     if cmd == 'STOP':
                         # Signal to stop the current simulation
-                        logger.info("Received STOP command, signaling to stop simulation")
+                        logger.info(
+                            "Received STOP command, signaling to stop simulation")
                         CommandRegistry.stop()
+                        if self._sim_thread and self._sim_thread.is_alive():
+                            logger.debug(
+                                "Terminating running simulation thread")
                     elif cmd == 'RUN':
                         # Reset the stop event to allow running simulations
-                        logger.info("Received RUN command, resetting stop event")
+                        logger.info(
+                            "Received RUN command, resetting stop event")
                         CommandRegistry.reset()
                     elif cmd == 'CHECK':
                         # Check the current status of the command registry
@@ -236,36 +276,31 @@ class MessageHandler(IRabbitMQMessageHandler):
                 ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
                 return
             logger.info("Received simulation type: %s", sim_type)
-            # Process based on simulation type
-            if sim_type == 'batch':
-                handle_batch_simulation(
-                    msg_dict,
-                    source,
-                    self.rabbitmq_manager,
-                    self.path_simulation,
-                    self.response_templates)
-                ch.basic_ack(delivery_tag=method.delivery_tag)
-            elif sim_type == 'streaming':
-                ch.basic_ack(delivery_tag=method.delivery_tag)
-                tcp_settings = self.config.get(
-                    'tcp', {})
-                handle_streaming_simulation(
-                    msg_dict, source,
-                    self.rabbitmq_manager,
-                    self.path_simulation,
-                    self.response_templates,
-                    tcp_settings
+            if self._sim_thread and self._sim_thread.is_alive():
+                logger.warning("Simulation already running")
+                error_response = create_response(
+                    template_type='error',
+                    sim_file=sim_file,
+                    sim_type=sim_type,
+                    response_templates={},
+                    bridge_meta=bridge_meta,
+                    request_id=request_id,
+                    error={
+                        'message': 'Simulation already running',
+                        'type': 'simulation_in_progress'
+                    }
                 )
-            elif sim_type == 'interactive':
-                ch.basic_ack(delivery_tag=method.delivery_tag)
-                tcp_settings = self.config.get('tcp', {})
-                handle_interactive_simulation(
-                    msg_dict, source,
-                    self.rabbitmq_manager,
-                    self.path_simulation,
-                    self.response_templates,
-                    tcp_settings
-                )
+                self.rabbitmq_manager.send_result(source, error_response)
+                ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+                return
+
+            self._sim_thread = threading.Thread(
+                target=self._run_simulation,
+                args=(sim_type, msg_dict, source),
+                daemon=True
+            )
+            self._sim_thread.start()
+            ch.basic_ack(delivery_tag=method.delivery_tag)
             else:
                 logger.error("Unknown simulation type: %s", sim_type)
                 error_response = create_response(
