@@ -7,6 +7,7 @@ import sys
 import ssl
 import uuid
 from typing import Dict, Any, Callable, Optional
+import threading
 
 import yaml
 import pika
@@ -37,6 +38,7 @@ class RabbitMQManager(IRabbitMQManager):
         self.config: Dict[str, Any] = config
         self.connection: Optional[pika.BlockingConnection] = None
         self.channel: Optional[pika.adapters.blocking_connection.BlockingChannel] = None
+        self._io_thread: Optional[threading.Thread] = None
         self.input_queue_name: str = f'Q.sim.{self.agent_id}'
         self.message_handler: Optional[Callable[[
             pika.adapters.blocking_connection.BlockingChannel,
@@ -207,6 +209,7 @@ class RabbitMQManager(IRabbitMQManager):
                 return
 
         try:
+            self._io_thread = threading.current_thread()
             self.channel.basic_consume(
                 queue=self.input_queue_name,
                 on_message_callback=self.message_handler
@@ -243,26 +246,34 @@ class RabbitMQManager(IRabbitMQManager):
         Returns:
             bool: True if successful, False otherwise
         """
-        try:
-            self.channel.basic_publish(
-                exchange=exchange,
-                routing_key=routing_key,
-                body=body,
-                properties=properties or pika.BasicProperties(
-                    delivery_mode=2  # Persistent message
+        def _publish() -> bool:
+            try:
+                self.channel.basic_publish(
+                    exchange=exchange,
+                    routing_key=routing_key,
+                    body=body,
+                    properties=properties or pika.BasicProperties(
+                        delivery_mode=2  # Persistent message
+                    )
                 )
-            )
-            logger.debug(
-                "Sent message to exchange %s with routing key %s",
-                exchange,
-                routing_key)
+                logger.debug(
+                    "Sent message to exchange %s with routing key %s",
+                    exchange,
+                    routing_key)
+                return True
+            except pika.exceptions.AMQPError as e:
+                logger.error("Failed to send message: %s", e)
+                return False
+            except Exception as e:  # pragma: no cover - unexpected errors
+                logger.error("Unexpected error: %s", e)
+                return False
+
+        if self._io_thread and threading.current_thread() is not self._io_thread:
+            assert self.connection is not None
+            self.connection.add_callback_threadsafe(_publish)
             return True
-        except pika.exceptions.AMQPError as e:
-            logger.error("Failed to send message: %s", e)
-            return False
-        except Exception as e:
-            logger.error("Unexpected error: %s", e)
-            return False
+
+        return _publish()
 
     def send_result(self, destination: str, result: Dict[str, Any]) -> bool:
         """
