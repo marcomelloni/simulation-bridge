@@ -9,6 +9,9 @@ import time
 from pathlib import Path
 from select import select
 from typing import Any, Dict, Optional
+import ssl
+
+import pika
 
 import psutil
 import yaml
@@ -24,7 +27,7 @@ from ..utils.constants import (
     DEFAULT_INPUT_PORT,
     DEFAULT_OUTPUT_PORT,
     MAX_FILENAME_LENGTH,
-    EXCHANGE_INPUT_STREAM
+    EXCHANGE_INPUT_STREAM,
 )
 
 logger = get_logger()
@@ -62,8 +65,7 @@ class _TcpServer:
             self._conn, _ = self._srv.accept()
             self._conn.setblocking(False)
         else:
-            logger.error(
-                "[INTERACTIVE] Timeout waiting for client connection.")
+            logger.error("[INTERACTIVE] Timeout waiting for client connection.")
             raise TimeoutError("No client connection received in time.")
 
     def send(self, data: Dict[str, Any]) -> None:
@@ -95,7 +97,9 @@ class _TcpServer:
                 continue
             try:
                 messages.append(json.loads(line.decode()))
-            except json.JSONDecodeError as exc:  # pragma: no cover - logs error and skips invalid message
+            except (
+                json.JSONDecodeError
+            ) as exc:  # pragma: no cover - logs error and skips invalid message
                 logger.error("[INTERACTIVE] Invalid JSON: %s", exc)
                 messages.append({"error": f"Invalid JSON: {str(exc)}"})
         # Return the messages list, i.e., all complete decoded JSON objects (plus any error placeholders) available at that moment.
@@ -179,9 +183,13 @@ class MatlabInteractiveController:
         self.start_time = time.time()
         self.out_srv.start()
         self.in_srv.start()
-        logger.debug("[INTERACTIVE] TCP servers started on %s:%s and %s:%s",
-                     self.out_srv.host, self.out_srv.port,
-                     self.in_srv.host, self.in_srv.port)
+        logger.debug(
+            "[INTERACTIVE] TCP servers started on %s:%s and %s:%s",
+            self.out_srv.host,
+            self.out_srv.port,
+            self.in_srv.host,
+            self.in_srv.port,
+        )
         self._start_matlab()
         logger.debug("[INTERACTIVE] Waiting for MATLAB to start...")
         pm.record_matlab_startup_complete()
@@ -215,9 +223,7 @@ class MatlabInteractiveController:
         if isinstance(frame, dict):
             sim = frame.get("simulation")
             if isinstance(sim, dict) and "inputs" in sim:
-                logger.debug(
-                    "[INTERACTIVE] Received inputs: %s",
-                    sim["inputs"])
+                logger.debug("[INTERACTIVE] Received inputs: %s", sim["inputs"])
                 return sim["inputs"]
         return frame
 
@@ -226,32 +232,67 @@ class MatlabInteractiveController:
         sim = msg_dict["simulation"]
         stream_key = sim["inputs"]["stream_source"].replace("rabbitmq://", "")
 
-        ch = self.broker.channel
+        # Interactive simulations run in their own thread. Create a dedicated
+        # connection so all RabbitMQ operations occur on this thread and do
+        # not interfere with the consumer's connection.
+        rabbitmq_cfg = self.broker.config.get("rabbitmq", {})
+        credentials = pika.PlainCredentials(
+            rabbitmq_cfg.get("username", "guest"),
+            rabbitmq_cfg.get("password", "guest"),
+        )
+        vhost = rabbitmq_cfg.get("vhost", "/")
+        if rabbitmq_cfg.get("tls", False):
+            context = ssl.create_default_context()
+            ssl_options = pika.SSLOptions(
+                context,
+                rabbitmq_cfg.get("host", "localhost"),
+            )
+            parameters = pika.ConnectionParameters(
+                host=rabbitmq_cfg.get("host", "localhost"),
+                port=rabbitmq_cfg.get("port", 5671),
+                virtual_host=vhost,
+                credentials=credentials,
+                ssl_options=ssl_options,
+                heartbeat=rabbitmq_cfg.get("heartbeat", 600),
+            )
+        else:
+            parameters = pika.ConnectionParameters(
+                host=rabbitmq_cfg.get("host", "localhost"),
+                port=rabbitmq_cfg.get("port", 5672),
+                virtual_host=vhost,
+                credentials=credentials,
+                heartbeat=rabbitmq_cfg.get("heartbeat", 600),
+            )
+        connection = pika.BlockingConnection(parameters)
+        ch = connection.channel()
         qname = f"Q.{self.agent_id}.interactive.{self.request_id}"
         ch.exchange_declare(
             exchange=EXCHANGE_INPUT_STREAM,
             exchange_type="topic",
-            durable=True)
+            durable=True,
+        )
         ch.queue_declare(queue=qname, durable=True)
         ch.queue_bind(
             exchange=EXCHANGE_INPUT_STREAM,
             queue=qname,
-            routing_key=stream_key)
+            routing_key=stream_key,
+        )
 
         try:
             while True:
-                if self.out_srv.matlab_proc and self.out_srv.matlab_proc.poll() is not None:
+                if (
+                    self.out_srv.matlab_proc
+                    and self.out_srv.matlab_proc.poll() is not None
+                ):
                     logger.debug("[INTERACTIVE] MATLAB process ended, stopping loop")
                     break
-                method, _ , body = ch.basic_get(
-                    queue=qname, auto_ack=True)
+                method, _, body = ch.basic_get(queue=qname, auto_ack=True)
                 while method:
                     frame = _parse_frame(body)
                     if frame:
                         # Send the inputs to MATLAB
                         self.in_srv.send(self._only_inputs(frame))
-                    method, _ , body = ch.basic_get(
-                        queue=qname, auto_ack=True)
+                    method, _, body = ch.basic_get(queue=qname, auto_ack=True)
 
                 # Receive Responses from MATLAB
                 for resp in self.out_srv.recv_all():
@@ -265,6 +306,10 @@ class MatlabInteractiveController:
             logger.info("[INTERACTIVE] Interrupted by user")
         finally:
             pm.record_simulation_complete()
+            try:
+                connection.close()
+            except Exception:  # pragma: no cover - cleanup errors
+                pass
 
     def close(self) -> None:
         """Close the TCP servers"""
@@ -275,8 +320,7 @@ class MatlabInteractiveController:
         meta: Dict[str, Any] = {}
         if self.start_time:
             meta["execution_time"] = time.time() - self.start_time
-        meta["memory_usage"] = psutil.Process(
-        ).memory_info().rss //  BYTES_IN_MB
+        meta["memory_usage"] = psutil.Process().memory_info().rss // BYTES_IN_MB
         return meta
 
 
@@ -291,9 +335,7 @@ def handle_interactive_simulation(
     pm = PerformanceMonitor()
     sim = msg_dict["simulation"]
     pm.start_operation(sim["request_id"])
-    logger.debug(
-        "[INTERACTIVE] Starting interactive simulation: %s",
-        sim["file"])
+    logger.debug("[INTERACTIVE] Starting interactive simulation: %s", sim["file"])
     controller = MatlabInteractiveController(
         path_simulation or sim.get("path"),
         sim["file"],

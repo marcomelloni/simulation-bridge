@@ -14,6 +14,12 @@ When `RabbitMQManager.start_consuming` is invoked, the calling thread becomes th
 
 The simulator thread performs the MATLAB work and uses the broker to publish results. Because `send_message` uses the callback mechanism described above, these results are sent safely through the consumer thread.
 
+Interactive simulations need to read frames from RabbitMQ while the consumer is
+busy. To avoid sharing the main connection across threads, the interactive
+controller opens its own `BlockingConnection` which is used exclusively by that
+thread. Results are still published through the broker so they use the callback
+mechanism.
+
 The handler stores a reference to the active simulator. It can call `stop()` in response to a `STOP` command to signal the thread to terminate. Only one simulator is active at a time, simplifying resource management.
 
 ## Stopping
