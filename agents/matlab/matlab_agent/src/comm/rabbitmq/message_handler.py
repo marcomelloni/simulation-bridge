@@ -15,9 +15,15 @@ import queue
 from .interfaces import IRabbitMQMessageHandler
 from ...utils.logger import get_logger
 from ...utils.create_response import create_response
-from ...core.batch import handle_batch_simulation
-from ...core.streaming import handle_streaming_simulation
-from ...core.interactive import handle_interactive_simulation
+from ...core.simulator import (
+    MatlabSimulator,
+    BatchSimulator,
+    StreamingSimulator,
+    InteractiveSimulator,
+)
+from ...core.batch import handle_batch_simulation  # Backwards compatibility
+from ...core.streaming import handle_streaming_simulation  # Backwards compat
+from ...core.interactive import handle_interactive_simulation  # Backwards compat
 from ...utils.commands import CommandRegistry
 
 logger = get_logger()
@@ -99,6 +105,7 @@ class MessageHandler(IRabbitMQMessageHandler):
         self.response_templates = self.config.get(
             'response_templates', {})
         self.interactive_queues: Dict[str, queue.Queue] = {}
+        self.active_simulator: Optional[MatlabSimulator] = None
 
     def get_agent_id(self) -> str:
         """
@@ -145,7 +152,11 @@ class MessageHandler(IRabbitMQMessageHandler):
                     cmd = msg_dict['command'].upper()
                     if cmd == 'STOP':
                         # Signal to stop the current simulation
-                        logger.info("Received STOP command, signaling to stop simulation")
+                        logger.info(
+                            "Received STOP command, signaling to stop simulation"
+                        )
+                        if self.active_simulator and self.active_simulator.is_running():
+                            self.active_simulator.stop()
                         CommandRegistry.stop()
                     elif cmd == 'RUN':
                         # Reset the stop event to allow running simulations
@@ -238,34 +249,39 @@ class MessageHandler(IRabbitMQMessageHandler):
             logger.info("Received simulation type: %s", sim_type)
             # Process based on simulation type
             if sim_type == 'batch':
-                handle_batch_simulation(
+                self.active_simulator = BatchSimulator(
                     msg_dict,
                     source,
                     self.rabbitmq_manager,
                     self.path_simulation,
-                    self.response_templates)
+                    self.response_templates,
+                )
+                self.active_simulator.start()
                 ch.basic_ack(delivery_tag=method.delivery_tag)
             elif sim_type == 'streaming':
                 ch.basic_ack(delivery_tag=method.delivery_tag)
-                tcp_settings = self.config.get(
-                    'tcp', {})
-                handle_streaming_simulation(
-                    msg_dict, source,
+                tcp_settings = self.config.get('tcp', {})
+                self.active_simulator = StreamingSimulator(
+                    msg_dict,
+                    source,
                     self.rabbitmq_manager,
                     self.path_simulation,
                     self.response_templates,
-                    tcp_settings
+                    tcp_settings,
                 )
+                self.active_simulator.start()
             elif sim_type == 'interactive':
                 ch.basic_ack(delivery_tag=method.delivery_tag)
                 tcp_settings = self.config.get('tcp', {})
-                handle_interactive_simulation(
-                    msg_dict, source,
+                self.active_simulator = InteractiveSimulator(
+                    msg_dict,
+                    source,
                     self.rabbitmq_manager,
                     self.path_simulation,
                     self.response_templates,
-                    tcp_settings
+                    tcp_settings,
                 )
+                self.active_simulator.start()
             else:
                 logger.error("Unknown simulation type: %s", sim_type)
                 error_response = create_response(
