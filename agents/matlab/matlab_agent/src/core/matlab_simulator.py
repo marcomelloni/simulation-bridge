@@ -11,6 +11,7 @@ MATLAB computational workloads.
 
 import os
 import time
+from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Dict, Union, List, Optional, Any, Tuple
 
@@ -27,11 +28,28 @@ class MatlabSimulationError(Exception):
     """Custom exception for MATLAB simulation errors."""
 
 
-class MatlabSimulator:
-    """
-    Manages the lifecycle of a MATLAB simulation with proper resource management,
-    error handling and type conversions.
-    """
+class MatlabSimulator(ABC):
+    """Interface for MATLAB-based simulators."""
+
+    @abstractmethod
+    def start(self) -> None:
+        """Start the simulation."""
+
+    @abstractmethod
+    def run(self, inputs: Dict[str, Any], outputs: List[str]) -> Dict[str, Any]:
+        """Run the simulation and return the results."""
+
+    @abstractmethod
+    def close(self) -> None:
+        """Stop the simulation and release resources."""
+
+    def get_metadata(self) -> Dict[str, Any]:  # pragma: no cover - optional
+        """Return optional simulation metadata."""
+        return {}
+
+
+class BatchSimulator(MatlabSimulator):
+    """Concrete simulator for batch MATLAB executions."""
 
     def __init__(
             self,

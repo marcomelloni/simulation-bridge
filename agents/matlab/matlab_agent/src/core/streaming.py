@@ -20,6 +20,7 @@ from ..comm.interfaces import IMessageBroker
 from ..utils.create_response import create_response
 from ..utils.logger import get_logger
 from ..utils.performance_monitor import PerformanceMonitor
+from .matlab_simulator import MatlabSimulator
 
 # Configure logger
 logger = get_logger()
@@ -343,6 +344,33 @@ class MatlabStreamingController:
     def close(self) -> None:
         """Clean up resources."""
         self.connection.close()
+
+
+class StreamingSimulator(MatlabSimulator):
+    """Adapter implementing the ``MatlabSimulator`` interface for streaming."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        self._controller = MatlabStreamingController(*args, **kwargs)
+
+    def start(self) -> None:
+        pm = PerformanceMonitor()
+        self._pm = pm
+        pm.start_operation(self._controller.request_id)
+        pm.record_matlab_start()
+        self._controller.start(pm)
+
+    def run(self, inputs: Dict[str, Any], outputs: list[str] | None = None
+            ) -> Dict[str, Any]:
+        self._controller.run(inputs, performance_monitor=self._pm)
+        self._pm.record_matlab_stop()
+        return {"status": "completed"}
+
+    def close(self) -> None:
+        self._pm.complete_operation()
+        self._controller.close()
+
+    def get_metadata(self) -> Dict[str, Any]:
+        return self._controller.get_metadata()
 
 
 def _handle_streaming_error(

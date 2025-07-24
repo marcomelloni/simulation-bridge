@@ -5,7 +5,7 @@ from pytest import approx
 from unittest.mock import Mock, patch, MagicMock
 from pathlib import Path
 
-from src.core.matlab_simulator import MatlabSimulator, MatlabSimulationError
+from src.core.matlab_simulator import BatchSimulator, MatlabSimulationError
 
 
 @pytest.fixture
@@ -39,8 +39,8 @@ def patch_path_exists():
 
 @pytest.fixture
 def simulator(sim_path, sim_file, patch_path_exists):
-    """Create a MatlabSimulator instance with mocked dependencies."""
-    return MatlabSimulator(sim_path, sim_file)
+    """Create a BatchSimulator instance with mocked dependencies."""
+    return BatchSimulator(sim_path, sim_file)
 
 
 @pytest.fixture
@@ -63,14 +63,14 @@ class TestMatlabSimulatorInitialization:
     def test_init_with_custom_function_name(
             self, sim_path, sim_file, patch_path_exists):
         """Test initialization with a custom function name."""
-        simulator = MatlabSimulator(sim_path, sim_file, "custom_function")
+        simulator = BatchSimulator(sim_path, sim_file, "custom_function")
         assert simulator.function_name == "custom_function"
 
     def test_init_with_invalid_path(self, sim_file):
         """Test initialization with an invalid path raises FileNotFoundError."""
         with patch('pathlib.Path.is_dir', return_value=False):
             with pytest.raises(FileNotFoundError, match="Simulation directory not found"):
-                MatlabSimulator('/invalid/path', sim_file)
+                BatchSimulator('/invalid/path', sim_file)
 
 
 class TestMatlabSimulatorOperations:

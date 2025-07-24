@@ -14,7 +14,11 @@ import yaml
 from ..utils.logger import get_logger
 from ..utils.create_response import create_response
 from ..comm.interfaces import IMessageBroker
-from .matlab_simulator import MatlabSimulator, MatlabSimulationError
+from .matlab_simulator import (
+    BatchSimulator,
+    MatlabSimulationError,
+    MatlabSimulator,
+)
 from ..utils.performance_monitor import PerformanceMonitor
 
 # Configure logger
@@ -56,7 +60,8 @@ def handle_batch_simulation(
         sim_path = path_simulation
         inputs, outputs = _extract_io_specs(data)
         logger.info("Starting simulation '%s'", sim_file)
-        sim = MatlabSimulator(sim_path, sim_file, function_name)
+        sim: MatlabSimulator = BatchSimulator(
+            sim_path, sim_file, function_name)
         # Record MATLAB startup complete
         performance_monitor.record_matlab_startup_complete()
         _send_progress(rabbitmq_manager,

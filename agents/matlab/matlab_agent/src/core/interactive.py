@@ -17,6 +17,7 @@ from ..comm.interfaces import IMessageBroker
 from ..utils.create_response import create_response
 from ..utils.logger import get_logger
 from ..utils.performance_monitor import PerformanceMonitor
+from .matlab_simulator import MatlabSimulator
 from ..utils.constants import (
     ACCEPT_TIMEOUT,
     BUFFER_SIZE,
@@ -74,7 +75,8 @@ class _TcpServer:
     def recv_all(self) -> list[Dict[str, Any]]:
         if not self._conn or not select([self._conn], [], [], 0)[0]:
             return []
-        # Read up to BUFFER_SIZE bytes from socket and append to internal buffer (self._buffer)
+        # Read up to BUFFER_SIZE bytes from socket and append to internal buffer
+        # (self._buffer)
         self._buffer += self._conn.recv(BUFFER_SIZE)
         # Messages are sent with a "\n" character as delimiter.
         # Split everything received into "lines".
@@ -99,7 +101,8 @@ class _TcpServer:
                 logger.error("[INTERACTIVE] Invalid JSON: %s", exc)
                 messages.append({"error": f"Invalid JSON: {str(exc)}"})
         # Return the messages list, i.e., all complete decoded JSON objects (plus any error placeholders) available at that moment.
-        # The next call to recv_all() will resume from where it left off, because only the last incomplete fragment remains in the buffer.
+        # The next call to recv_all() will resume from where it left off,
+        # because only the last incomplete fragment remains in the buffer.
         return messages
 
     def close(self) -> None:
@@ -241,16 +244,17 @@ class MatlabInteractiveController:
         try:
             while True:
                 if self.out_srv.matlab_proc and self.out_srv.matlab_proc.poll() is not None:
-                    logger.debug("[INTERACTIVE] MATLAB process ended, stopping loop")
+                    logger.debug(
+                        "[INTERACTIVE] MATLAB process ended, stopping loop")
                     break
-                method, _ , body = ch.basic_get(
+                method, _, body = ch.basic_get(
                     queue=qname, auto_ack=True)
                 while method:
                     frame = _parse_frame(body)
                     if frame:
                         # Send the inputs to MATLAB
                         self.in_srv.send(self._only_inputs(frame))
-                    method, _ , body = ch.basic_get(
+                    method, _, body = ch.basic_get(
                         queue=qname, auto_ack=True)
 
                 # Receive Responses from MATLAB
@@ -276,7 +280,7 @@ class MatlabInteractiveController:
         if self.start_time:
             meta["execution_time"] = time.time() - self.start_time
         meta["memory_usage"] = psutil.Process(
-        ).memory_info().rss //  BYTES_IN_MB
+        ).memory_info().rss // BYTES_IN_MB
         return meta
 
 
@@ -339,3 +343,30 @@ def handle_interactive_simulation(
     finally:
         pm.complete_operation()
         controller.close()
+
+
+class InteractiveSimulator(MatlabSimulator):
+    """Adapter implementing the ``MatlabSimulator`` interface for interactive mode."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        self._controller = MatlabInteractiveController(*args, **kwargs)
+
+    def start(self) -> None:
+        pm = PerformanceMonitor()
+        self._pm = pm
+        pm.start_operation(self._controller.request_id)
+        pm.record_matlab_start()
+        self._controller.start(pm)
+
+    def run(self, msg_dict: Dict[str, Any], outputs: list[str] | None = None
+            ) -> Dict[str, Any]:
+        self._controller.run(self._pm, msg_dict)
+        self._pm.record_matlab_stop()
+        return {"status": "completed"}
+
+    def close(self) -> None:
+        self._pm.complete_operation()
+        self._controller.close()
+
+    def get_metadata(self) -> Dict[str, Any]:
+        return self._controller.metadata()
