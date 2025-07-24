@@ -145,10 +145,10 @@ class TestMessageHandler:
         assert self.handler.get_agent_id() == self.agent_id
 
     @patch('src.comm.rabbitmq.message_handler.yaml.safe_load')
-    @patch('src.comm.rabbitmq.message_handler.handle_batch_simulation')
+    @patch('src.comm.rabbitmq.message_handler.BatchSimulator')
     @patch('src.comm.rabbitmq.message_handler.create_response')
     def test_handle_message_batch_simulation_success(
-        self, mock_create_response, mock_handle_batch, mock_yaml_load
+        self, mock_create_response, mock_batch_cls, mock_yaml_load
     ):
         """Test successful handling of batch simulation message."""
         # Setup valid message data
@@ -175,22 +175,23 @@ class TestMessageHandler:
 
         # Verify
         mock_yaml_load.assert_called_once_with(b'test message body')
-        mock_handle_batch.assert_called_once_with(
+        mock_batch_cls.assert_called_once_with(
             message_data,
             'source',
             self.mock_rabbitmq_manager,
             '/test/path',
             {'error': 'error_template'}
         )
+        mock_batch_cls.return_value.start.assert_called_once()
         self.mock_channel.basic_ack.assert_called_once_with(
             delivery_tag="test_tag"
         )
 
     @patch('src.comm.rabbitmq.message_handler.yaml.safe_load')
-    @patch('src.comm.rabbitmq.message_handler.handle_streaming_simulation')
+    @patch('src.comm.rabbitmq.message_handler.StreamingSimulator')
     @patch('src.comm.rabbitmq.message_handler.create_response')
     def test_handle_message_streaming_simulation_success(
-        self, mock_create_response, mock_handle_streaming, mock_yaml_load
+        self, mock_create_response, mock_stream_cls, mock_yaml_load
     ):
         """Test successful handling of streaming simulation message."""
         # Setup valid message data
@@ -217,7 +218,7 @@ class TestMessageHandler:
 
         # Verify
         mock_yaml_load.assert_called_once_with(b'test message body')
-        mock_handle_streaming.assert_called_once_with(
+        mock_stream_cls.assert_called_once_with(
             message_data,
             'source',
             self.mock_rabbitmq_manager,
@@ -225,6 +226,7 @@ class TestMessageHandler:
             {'error': 'error_template'},
             {'port': 8080}
         )
+        mock_stream_cls.return_value.start.assert_called_once()
         self.mock_channel.basic_ack.assert_called_once_with(
             delivery_tag="test_tag"
         )
@@ -495,7 +497,7 @@ class TestMessageHandler:
             self.mock_method.routing_key = routing_key
             expected_source = routing_key.split('.')[0]
 
-            with patch('src.comm.rabbitmq.message_handler.handle_batch_simulation') as mock_batch:
+            with patch('src.comm.rabbitmq.message_handler.BatchSimulator') as mock_batch_cls:
                 self.handler.handle_message(
                     self.mock_channel,
                     self.mock_method,
@@ -504,11 +506,11 @@ class TestMessageHandler:
                 )
 
                 # Verify source is correctly extracted
-                mock_batch.assert_called_once()
-                call_args = mock_batch.call_args[0]
+                mock_batch_cls.assert_called_once()
+                call_args = mock_batch_cls.call_args[0]
                 assert call_args[1] == expected_source  # source parameter
 
-                mock_batch.reset_mock()
+                mock_batch_cls.reset_mock()
 
 
 # Integration test class for end-to-end testing
@@ -530,8 +532,8 @@ class TestMessageHandlerIntegration:
             self.config
         )
 
-    @patch('src.comm.rabbitmq.message_handler.handle_batch_simulation')
-    def test_complete_batch_message_flow(self, mock_handle_batch):
+    @patch('src.comm.rabbitmq.message_handler.BatchSimulator')
+    def test_complete_batch_message_flow(self, mock_batch_cls):
         """Test complete flow of a valid batch message."""
         # Create complete valid message
         message_dict = {
@@ -578,8 +580,8 @@ class TestMessageHandlerIntegration:
         )
 
         # Verify successful processing
-        mock_handle_batch.assert_called_once()
-        call_args = mock_handle_batch.call_args[0]
+        mock_batch_cls.assert_called_once()
+        call_args = mock_batch_cls.call_args[0]
 
         # Verify all parameters passed correctly
         assert call_args[0] == message_dict  # message data
@@ -592,9 +594,10 @@ class TestMessageHandlerIntegration:
         mock_channel.basic_ack.assert_called_once_with(
             delivery_tag="integration_tag"
         )
+        mock_batch_cls.return_value.start.assert_called_once()
 
-    @patch('src.comm.rabbitmq.message_handler.handle_streaming_simulation')
-    def test_complete_streaming_message_flow(self, mock_handle_streaming):
+    @patch('src.comm.rabbitmq.message_handler.StreamingSimulator')
+    def test_complete_streaming_message_flow(self, mock_stream_cls):
         """Test complete flow of a valid streaming message."""
         # Create complete valid streaming message
         message_dict = {
@@ -636,8 +639,8 @@ class TestMessageHandlerIntegration:
         )
 
         # Verify successful processing
-        mock_handle_streaming.assert_called_once()
-        call_args = mock_handle_streaming.call_args[0]
+        mock_stream_cls.assert_called_once()
+        call_args = mock_stream_cls.call_args[0]
 
         # Verify all parameters passed correctly
         assert call_args[0] == message_dict  # message data
@@ -653,3 +656,4 @@ class TestMessageHandlerIntegration:
         mock_channel.basic_ack.assert_called_once_with(
             delivery_tag="streaming_tag"
         )
+        mock_stream_cls.return_value.start.assert_called_once()
