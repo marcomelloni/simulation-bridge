@@ -62,6 +62,15 @@ class IMessageBroker(ABC):
         """
 
     @abstractmethod
+    def send_message_threadsafe(
+            self,
+            exchange: str,
+            routing_key: str,
+            body: Any,
+            properties: Optional[Any] = None) -> None:
+        """Schedule :meth:`send_message` to run in the broker thread."""
+
+    @abstractmethod
     def send_result(self, destination: str, result: Dict[str, Any]) -> bool:
         """
         Send operation results to the specified destination.
@@ -73,6 +82,10 @@ class IMessageBroker(ABC):
         Returns:
             bool: True if successful, False otherwise
         """
+
+    @abstractmethod
+    def send_result_threadsafe(self, destination: str, result: Dict[str, Any]) -> None:
+        """Schedule :meth:`send_result` to run in the broker thread."""
 
     @abstractmethod
     def close(self) -> None:

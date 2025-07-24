@@ -89,8 +89,8 @@ def handle_batch_simulation(
         )
 
         # Send result and record it
-        if rabbitmq_manager.send_result(source, success_response):
-            performance_monitor.record_result_sent()
+        rabbitmq_manager.send_result_threadsafe(source, success_response)
+        performance_monitor.record_result_sent()
 
         logger.info("Simulation '%s' completed successfully", sim_file)
 
@@ -164,7 +164,7 @@ def _send_progress(
             percentage=percentage,
             bridge_meta=bridge_meta,
             request_id=request_id)
-        broker.send_result(source, progress_response)
+        broker.send_result_threadsafe(source, progress_response)
 
 
 def _get_metadata(sim: MatlabSimulator) -> Dict[str, Any]:
@@ -176,7 +176,7 @@ def _send_response(broker: IMessageBroker, source: str,
                    response: Dict[str, Any]) -> None:
     """Send response through message broker."""
     logger.debug(yaml.dump(response))
-    broker.send_result(source, response)
+    broker.send_result_threadsafe(source, response)
 
 
 def _handle_error(error: Exception,

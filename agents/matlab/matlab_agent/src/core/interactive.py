@@ -206,7 +206,7 @@ class MatlabInteractiveController:
             request_id=self.request_id,
         )
         msg["output"] = payload
-        self.broker.send_result(self.source, msg)
+        self.broker.send_result_threadsafe(self.source, msg)
         self.sequence += 1
 
     @staticmethod
@@ -310,7 +310,7 @@ def handle_interactive_simulation(
         controller.run(pm, msg_dict)
     except (KeyError, ValueError) as exc:  # Handle specific known errors
         logger.error("[INTERACTIVE] Known error: %s", exc)
-        rabbitmq_manager.send_result(
+        rabbitmq_manager.send_result_threadsafe(
             source,
             create_response(
                 "error",
@@ -324,7 +324,7 @@ def handle_interactive_simulation(
         )
     except Exception as exc:  # pragma: no cover - unexpected errors
         logger.exception("[INTERACTIVE] Unexpected error: %s", exc)
-        rabbitmq_manager.send_result(
+        rabbitmq_manager.send_result_threadsafe(
             source,
             create_response(
                 "error",

@@ -264,6 +264,26 @@ class RabbitMQManager(IRabbitMQManager):
             logger.error("Unexpected error: %s", e)
             return False
 
+    def send_message_threadsafe(
+        self,
+        exchange: str,
+        routing_key: str,
+        body: str,
+        properties: Optional[BasicProperties] = None,
+    ) -> None:
+        """Schedule *send_message* to run in the connection thread."""
+        if not self.connection:
+            logger.error("Connection not available for async publish")
+            return
+
+        def _publish() -> None:
+            self.send_message(exchange, routing_key, body, properties)
+
+        try:
+            self.connection.add_callback_threadsafe(_publish)
+        except Exception as exc:  # pragma: no cover - unexpected errors
+            logger.error("Failed to schedule async publish: %s", exc)
+
     def send_result(self, destination: str, result: Dict[str, Any]) -> bool:
         """
         Send simulation results to the specified destination.
@@ -313,6 +333,20 @@ class RabbitMQManager(IRabbitMQManager):
             logger.error("Failed to send result to %s", destination)
 
         return success
+
+    def send_result_threadsafe(self, destination: str, result: Dict[str, Any]) -> None:
+        """Schedule :meth:`send_result` to run in the connection thread."""
+        if not self.connection:
+            logger.error("Connection not available for async result")
+            return
+
+        def _publish() -> None:
+            self.send_result(destination, result)
+
+        try:
+            self.connection.add_callback_threadsafe(_publish)
+        except Exception as exc:  # pragma: no cover - unexpected errors
+            logger.error("Failed to schedule async result: %s", exc)
 
     def close(self) -> None:
         """

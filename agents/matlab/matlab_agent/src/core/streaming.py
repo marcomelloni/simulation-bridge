@@ -105,8 +105,8 @@ def handle_streaming_simulation(
             request_id=request_id,
         )
         # Send result and record it
-        if rabbitmq_manager.send_result(source, success_response):
-            performance_monitor.record_result_sent()
+        rabbitmq_manager.send_result_threadsafe(source, success_response)
+        performance_monitor.record_result_sent()
         logger.info("Completed: %s", sim_file)
 
     except Exception as e:
@@ -120,7 +120,7 @@ def handle_streaming_simulation(
             request_id=request_id,
             error={'message': str(e), 'type': 'execution_error'}
         )
-        rabbitmq_manager.send_result(source, error_response)
+        rabbitmq_manager.send_result_threadsafe(source, error_response)
         raise
     finally:
         # Always complete the operation to record metrics
@@ -250,7 +250,7 @@ class MatlabStreamingController:
             # Record MATLAB startup complete
             performance_monitor.record_matlab_startup_complete()
             logger.debug("MATLAB process started")
-            self.message_broker.send_result(
+            self.message_broker.send_result_threadsafe(
                 self.source,
                 create_response(
                     'success',
@@ -286,7 +286,7 @@ class MatlabStreamingController:
             bridge_meta=self.bridge_meta,
             request_id=self.request_id,
         )
-        self.message_broker.send_result(self.source, response)
+        self.message_broker.send_result_threadsafe(self.source, response)
 
     def run(self, inputs: Dict[str, Any], performance_monitor) -> None:
         """Run simulation and handle streaming data."""
@@ -370,7 +370,7 @@ def _handle_streaming_error(
                  error_type,
                  str(error))
 
-    message_broker.send_result(
+    message_broker.send_result_threadsafe(
         source,
         create_response(
             'error',

@@ -160,6 +160,13 @@ class Connect:
             return self.broker.send_result(destination, result)
         raise RuntimeError(BROKER_NOT_INITIALIZED_ERROR)
 
+    def send_result_threadsafe(self, destination: str, result: Dict[str, Any]) -> None:
+        """Thread-safe variant of :meth:`send_result`."""
+        if self.broker:
+            self.broker.send_result_threadsafe(destination, result)
+            return
+        raise RuntimeError(BROKER_NOT_INITIALIZED_ERROR)
+
     def close(self) -> None:
         """
         Close the connection to the message broker.

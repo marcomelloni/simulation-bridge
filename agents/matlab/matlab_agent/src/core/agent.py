@@ -108,3 +108,7 @@ class MatlabAgent:
         if success:
             self.performance_monitor.record_result_sent()
         return success
+
+    def send_result_threadsafe(self, destination: str, result: Dict[str, Any]) -> None:
+        """Thread-safe wrapper around :meth:`send_result`."""
+        self.comm.send_result_threadsafe(destination, result)
