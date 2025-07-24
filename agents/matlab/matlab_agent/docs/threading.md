@@ -1,27 +1,22 @@
 # Thread Management in the MATLAB Agent
 
-The MATLAB agent relies on a dedicated thread to handle RabbitMQ I/O while simulations run in their own worker threads. This separation avoids thread safety issues with `pika` and allows the agent to interrupt simulations cleanly.
+The agent separates RabbitMQ communication from MATLAB execution using a simple thread model. All RabbitMQ I/O occurs on a single consumer thread while each simulation runs in its own worker thread. This prevents thread‑safety problems in `pika` and allows the agent to interrupt simulations without blocking message handling.
 
-## Consumer Thread
+## Consumer (I/O) Thread
 
-When `RabbitMQManager.start_consuming` is invoked, the calling thread becomes the **I/O thread**. Every message received from RabbitMQ is processed on this thread. Because `pika.BlockingConnection` is not thread safe, any publish operation must occur on this same thread.
+`RabbitMQManager.start_consuming()` is called from the main thread of the agent. The method stores the thread that invokes it as the **I/O thread** and starts `pika`'s blocking consumption loop. Because `pika.BlockingConnection` is not thread safe, every publish must happen on this same thread.
 
-`RabbitMQManager.send_message` checks the current thread against the stored I/O thread. If a different thread needs to publish a message (for example from a running simulation), the method schedules the publish with `connection.add_callback_threadsafe`. This guarantees that all communication with RabbitMQ happens on the consumer thread.
+`RabbitMQManager.send_message()` checks whether the current thread matches the stored I/O thread. If a worker thread needs to publish a message, the method schedules the publish with `connection.add_callback_threadsafe()`. The callback is then executed on the consumer thread so all RabbitMQ operations are serialized on the connection.
 
 ## Simulation Threads
 
-`MessageHandler` creates an instance of `BatchSimulator`, `StreamingSimulator` or `InteractiveSimulator` depending on the message type. Each simulator implements the common `MatlabSimulator` interface. Calling `start()` launches a new thread where the simulator executes its `_execute` logic.
+`MessageHandler` creates a concrete implementation of the `MatlabSimulator` interface whenever a new message arrives. The available implementations are `BatchSimulator`, `StreamingSimulator` and `InteractiveSimulator`. Calling `start()` on any simulator launches a new daemon thread and invokes its private `_execute()` method.
 
-The simulator thread performs the MATLAB work and uses the broker to publish results. Because `send_message` uses the callback mechanism described above, these results are sent safely through the consumer thread.
+The simulator thread performs the MATLAB computation and uses `RabbitMQManager.send_result()` to report progress or final data. Because `send_result()` relies on `send_message()` the actual publish always occurs on the I/O thread.
 
-Interactive simulations need to read frames from RabbitMQ while the consumer is
-busy. To avoid sharing the main connection across threads, the interactive
-controller opens its own `BlockingConnection` which is used exclusively by that
-thread. Results are still published through the broker so they use the callback
-mechanism.
+Interactive simulations also need to read frames from RabbitMQ while running. To avoid sharing the consumer connection across threads the interactive controller opens a dedicated `BlockingConnection` inside its thread. Results are still published through the manager so they follow the same safe path.
 
-The handler stores a reference to the active simulator. It can call `stop()` in response to a `STOP` command to signal the thread to terminate. Only one simulator is active at a time, simplifying resource management.
+## Active Simulator and Stopping
 
-## Stopping
+`MessageHandler` stores the currently running simulator instance in `active_simulator`. Only one simulator can run at a time. When a `STOP` command is received the handler calls `active_simulator.stop()` which clears an internal event. Each `_execute()` loop checks this flag and exits when it is cleared. This mechanism provides a cooperative way to terminate simulations without abruptly killing threads.
 
-A simulator sets an internal event when running. Calling `stop()` clears this event. The `_execute` loop in each implementation checks this flag and exits when it is cleared, ensuring that MATLAB executions can be interrupted without forcing the thread to stop abruptly.
