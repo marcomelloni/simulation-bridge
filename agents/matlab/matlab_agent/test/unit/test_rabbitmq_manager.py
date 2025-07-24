@@ -123,36 +123,47 @@ class TestRabbitMQManager:
         mock_connection: Tuple[mock._patch, MagicMock],
         mock_config: Dict[str, Any],  # <-- aggiungi qui
     ) -> None:
-        _, channel_mock = mock_connection
+        connection_mock, channel_mock = mock_connection
+        cb_list = []
+        connection_mock.return_value.add_callback_threadsafe.side_effect = (
+            lambda cb: cb_list.append(cb) or cb())
 
-        # Success
         result_ok = rabbitmq_manager.send_message(
             mock_config["exchanges"]["output"],
             "routing.key",
             "body",
         )
         assert result_ok is True
+        connection_mock.return_value.add_callback_threadsafe.assert_called_once()
         channel_mock.basic_publish.assert_called_once()
 
         # AMQPError
         channel_mock.basic_publish.reset_mock()
+        connection_mock.return_value.add_callback_threadsafe.reset_mock()
         channel_mock.basic_publish.side_effect = pika_exceptions.AMQPError()
         result_amqp = rabbitmq_manager.send_message(
             mock_config["exchanges"]["output"], "key", "body"
         )
-        assert result_amqp is False
+        assert result_amqp is True
+        connection_mock.return_value.add_callback_threadsafe.assert_called_once()
+        channel_mock.basic_publish.assert_called_once()
 
         # General Exception
         channel_mock.basic_publish.reset_mock()
+        connection_mock.return_value.add_callback_threadsafe.reset_mock()
         channel_mock.basic_publish.side_effect = Exception()
         result_exc = rabbitmq_manager.send_message(
             mock_config["exchanges"]["output"], "key", "body"
         )
-        assert result_exc is False
+        assert result_exc is True
+        connection_mock.return_value.add_callback_threadsafe.assert_called_once()
+        channel_mock.basic_publish.assert_called_once()
 
     def test_send_result_and_propagation_failure(
             self, rabbitmq_manager, mock_connection, monkeypatch):
-        _, channel_mock = mock_connection
+        connection_mock, channel_mock = mock_connection
+        connection_mock.return_value.add_callback_threadsafe.side_effect = (
+            lambda cb: cb())
 
         payload = {"key": "value"}
         succeeded = rabbitmq_manager.send_result("dest", payload)

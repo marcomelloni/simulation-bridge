@@ -243,25 +243,34 @@ class RabbitMQManager(IRabbitMQManager):
         Returns:
             bool: True if successful, False otherwise
         """
-        try:
-            self.channel.basic_publish(
-                exchange=exchange,
-                routing_key=routing_key,
-                body=body,
-                properties=properties or pika.BasicProperties(
-                    delivery_mode=2  # Persistent message
-                )
-            )
-            logger.debug(
-                "Sent message to exchange %s with routing key %s",
-                exchange,
-                routing_key)
-            return True
-        except pika.exceptions.AMQPError as e:
-            logger.error("Failed to send message: %s", e)
+        if not self.channel or not self.connection:
+            logger.error("Channel or connection not initialized")
             return False
-        except Exception as e:
-            logger.error("Unexpected error: %s", e)
+
+        def _publish() -> None:
+            try:
+                self.channel.basic_publish(
+                    exchange=exchange,
+                    routing_key=routing_key,
+                    body=body,
+                    properties=properties or pika.BasicProperties(
+                        delivery_mode=2
+                    )
+                )
+                logger.debug(
+                    "Sent message to exchange %s with routing key %s",
+                    exchange,
+                    routing_key)
+            except pika.exceptions.AMQPError as exc:
+                logger.error("Failed to send message: %s", exc)
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.error("Unexpected error: %s", exc)
+
+        try:
+            self.connection.add_callback_threadsafe(_publish)
+            return True
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.error("Failed to schedule message publish: %s", exc)
             return False
 
     def send_result(self, destination: str, result: Dict[str, Any]) -> bool:
