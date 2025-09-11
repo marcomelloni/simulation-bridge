@@ -69,7 +69,7 @@ class Listener:
                         delta = receive_time - int(send_time)
                         logger.debug(f"Delay: {delta} ms")
                     else:
-                        logger.warning("system_time not found in message")
+                        logger.debug("system_time not found in message")
             except KeyboardInterrupt:
                 logger.info("\nStopped by user.")
             finally:
