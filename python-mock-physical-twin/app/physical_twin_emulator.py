@@ -45,6 +45,7 @@ from app.device.iot_device import IoTDevice
 from app.protocol.http_protocol import HttpProtocol
 from app.protocol.mqtt_protocol import MqttProtocol
 from app.protocol.simulation_bridge_amqp_protocol import SimulationBridgeAmqpProtocol
+from app.protocol.simulation_bridge_rest_protocol import SimulationBridgeRestProtocol
 from app.utils.emulator_utils import ProtocolType
 
 
@@ -127,6 +128,13 @@ def main(config_file):
             protocol_dict[protocol.id] = protocol
         elif protocol_config["type"] == ProtocolType.SIMULATION_BRIDGE_AMQP_PROTOCOL_TYPE.value:
             protocol = SimulationBridgeAmqpProtocol(
+                protocol_id=protocol_config["id"],
+                device_dict=device_dict,
+                config=protocol_config["config"],
+            )
+            protocol_dict[protocol.id] = protocol
+        elif protocol_config["type"] == ProtocolType.SIMULATION_BRIDGE_REST_PROTOCOL_TYPE.value:
+            protocol = SimulationBridgeRestProtocol(
                 protocol_id=protocol_config["id"],
                 device_dict=device_dict,
                 config=protocol_config["config"],
