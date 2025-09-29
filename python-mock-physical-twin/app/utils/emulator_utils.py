@@ -39,6 +39,7 @@ class ProtocolType(Enum):
     HTTP_PROTOCOL_TYPE = "http"
     MQTT_PROTOCOL_TYPE = "mqtt"
     SIMULATION_BRIDGE_AMQP_PROTOCOL_TYPE = "simulation_bridge_amqp"
+    SIMULATION_BRIDGE_MQTT_PROTOCOL_TYPE = "simulation_bridge_mqtt"
     SIMULATION_BRIDGE_REST_PROTOCOL_TYPE = "simulation_bridge_rest"
 
 
