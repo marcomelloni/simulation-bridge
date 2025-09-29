@@ -56,7 +56,8 @@ pipx install poetry
 poetry --version
 
 # Activate the environment (run the path shown)
-poetry env activate
+poetry env activate #Mac users
+poetry shell #Windows users
 ```
 
 Verify the active Python:
