@@ -89,6 +89,10 @@ def main(config_file):
             simulation_bridge_config[key] = value
 
     def resolve_simulation_bridge_reference(value):
+        if isinstance(value, dict):
+            return {key: resolve_simulation_bridge_reference(val) for key, val in value.items()}
+        if isinstance(value, list):
+            return [resolve_simulation_bridge_reference(item) for item in value]
         if not isinstance(value, str):
             return value
         references = {
@@ -109,43 +113,45 @@ def main(config_file):
 
         # HTTP Protocol Support
         if protocol_config["type"] == ProtocolType.HTTP_PROTOCOL_TYPE.value:
-            resolved_config = {
-                key: resolve_simulation_bridge_reference(val)
-                for key, val in protocol_config["config"].items()
-            }
+            resolved_config = resolve_simulation_bridge_reference(protocol_config["config"])
+            protocol_config["config"] = resolved_config
             protocol = HttpProtocol(protocol_id=protocol_config["id"],
                                     device_dict=device_dict,
-                                    config=protocol_config["config"])
+                                    config=resolved_config)
             protocol_dict[protocol.id] = protocol
         # MQTT Protocol Support
         elif protocol_config["type"] == ProtocolType.MQTT_PROTOCOL_TYPE.value:
-            resolved_config = {
-                key: resolve_simulation_bridge_reference(val)
-                for key, val in protocol_config["config"].items()
-            }
+            resolved_config = resolve_simulation_bridge_reference(protocol_config["config"])
+            protocol_config["config"] = resolved_config
             protocol = MqttProtocol(protocol_id=protocol_config["id"],
                                     device_dict=device_dict,
-                                    config=protocol_config["config"])
+                                    config=resolved_config)
             protocol_dict[protocol.id] = protocol
         elif protocol_config["type"] == ProtocolType.SIMULATION_BRIDGE_AMQP_PROTOCOL_TYPE.value:
+            resolved_config = resolve_simulation_bridge_reference(protocol_config["config"])
+            protocol_config["config"] = resolved_config
             protocol = SimulationBridgeAmqpProtocol(
                 protocol_id=protocol_config["id"],
                 device_dict=device_dict,
-                config=protocol_config["config"],
+                config=resolved_config,
             )
             protocol_dict[protocol.id] = protocol
         elif protocol_config["type"] == ProtocolType.SIMULATION_BRIDGE_MQTT_PROTOCOL_TYPE.value:
+            resolved_config = resolve_simulation_bridge_reference(protocol_config["config"])
+            protocol_config["config"] = resolved_config
             protocol = SimulationBridgeMqttProtocol(
                 protocol_id=protocol_config["id"],
                 device_dict=device_dict,
-                config=protocol_config["config"],
+                config=resolved_config,
             )
             protocol_dict[protocol.id] = protocol
         elif protocol_config["type"] == ProtocolType.SIMULATION_BRIDGE_REST_PROTOCOL_TYPE.value:
+            resolved_config = resolve_simulation_bridge_reference(protocol_config["config"])
+            protocol_config["config"] = resolved_config
             protocol = SimulationBridgeRestProtocol(
                 protocol_id=protocol_config["id"],
                 device_dict=device_dict,
-                config=protocol_config["config"],
+                config=resolved_config,
             )
             protocol_dict[protocol.id] = protocol
         else:
